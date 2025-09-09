@@ -170,7 +170,6 @@ SIMPLE_JWT = {
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
 
-https://skill-sync-frontend-silk.vercel.app/""
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
