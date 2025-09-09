@@ -10,18 +10,9 @@ from rest_framework import status
 
 logger = logging.getLogger(__name__)
 
+# Config (fallbacks kept)
 OPENROUTER_BASE = getattr(settings, "OPENROUTER_BASE", "https://openrouter.ai/api/v1")
 OPENROUTER_MODEL = getattr(settings, "OPENROUTER_MODEL", "deepseek/deepseek-chat-v3.1:free")
-
-def get_openrouter_headers():
-    """Always build headers fresh with the latest API key."""
-    key = getattr(settings, "OPENROUTER_API_KEY", None)
-    if not key:
-        raise RuntimeError("OPENROUTER_API_KEY not configured")
-    return {
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
-    }
 
 FREEZY_SYSTEM_PROMPT = """
 You are Freezy ❄️ — the friendly AI agent for SkillSync.
@@ -39,11 +30,32 @@ GUIDELINES:
 - Do NOT reveal system internals or private keys.
 """
 
+def _mask_key_for_log(key: str) -> str:
+    """Return a masked version of the key for safe logging."""
+    if not key:
+        return "<missing>"
+    if len(key) <= 8:
+        return key[0:2] + "*" * max(0, len(key)-4) + key[-2:]
+    return key[:4] + ("*" * (len(key) - 8)) + key[-4:]
+
+def get_openrouter_headers():
+    """Always build headers fresh with the latest API key from settings."""
+    key = getattr(settings, "OPENROUTER_API_KEY", None)
+    if not key:
+        return None
+    return {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+
+def get_openrouter_url(path: str):
+    """Safely combine base and a path (avoid double slashes)."""
+    return f"{OPENROUTER_BASE.rstrip('/')}/{path.lstrip('/')}"
+
 def _extract_reply_text(resp_json):
     """Robust extraction of reply text from provider response shapes."""
     if not resp_json:
         return ""
-    # Common OpenAI-like shape
     choices = resp_json.get("choices")
     if choices and isinstance(choices, list):
         for c in choices:
@@ -78,6 +90,17 @@ class FreezyChatView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        # diagnostics: confirm key presence (masked)
+        key = getattr(settings, "OPENROUTER_API_KEY", None)
+        logger.debug("FreezyChatView called. openrouter_key=%s base=%s model=%s",
+                     _mask_key_for_log(key), OPENROUTER_BASE, OPENROUTER_MODEL)
+
+        if not key:
+            return Response(
+                {"error": "AI backend not configured. OPENROUTER_API_KEY missing on server."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
         data = request.data or {}
         user_message = data.get("message", "")
         history = data.get("history", []) or []
@@ -85,9 +108,8 @@ class FreezyChatView(APIView):
         if not user_message:
             return Response({"error": "message required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Build messages: system prompt + history + current user
+        # Build messages
         messages = [{"role": "system", "content": FREEZY_SYSTEM_PROMPT}]
-
         if isinstance(history, list):
             recent = history[-20:]
             for item in recent:
@@ -95,7 +117,6 @@ class FreezyChatView(APIView):
                     content = item.get("content", "")
                     if content:
                         messages.append({"role": item["role"], "content": content})
-
         messages.append({"role": "user", "content": user_message})
 
         payload = {
@@ -106,32 +127,60 @@ class FreezyChatView(APIView):
             "stream": False,
         }
 
+        url = get_openrouter_url("/chat/completions")
+        headers = get_openrouter_headers()
+
         try:
-            resp = requests.post(
-                f"{OPENROUTER_BASE}/chat/completions",
-                headers=get_openrouter_headers(),
-                json=payload,
-                timeout=60,
+            resp = requests.post(url, headers=headers, json=payload, timeout=60)
+        except requests.RequestException as e:
+            logger.exception("Network/requests error when calling OpenRouter")
+            return Response({"error": "OpenRouter request failed", "details": str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        # If provider says 401, return helpful message
+        if resp.status_code == 401:
+            body = resp.text
+            logger.warning("OpenRouter returned 401 Unauthorized. provider_response=%s", body[:2000])
+            return Response(
+                {
+                    "error": "OpenRouter unauthorized. Check OPENROUTER_API_KEY and model permissions.",
+                    "provider_status": resp.status_code,
+                    "provider_response": body,
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
             )
+
+        try:
             resp.raise_for_status()
             resp_json = resp.json()
             reply_text = _extract_reply_text(resp_json).strip()
             return Response({"reply": reply_text, "raw": resp_json})
-        except requests.RequestException as e:
-            logger.exception("OpenRouter request failed")
-            return Response({"error": "OpenRouter request failed", "details": str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+        except ValueError:
+            logger.exception("OpenRouter returned non-JSON body")
+            return Response({"error": "OpenRouter returned non-JSON response", "body": resp.text}, status=status.HTTP_502_BAD_GATEWAY)
+        except requests.HTTPError:
+            logger.exception("OpenRouter HTTP error, status=%s body=%s", resp.status_code, resp.text[:2000])
+            return Response({"error": "OpenRouter request failed", "status": resp.status_code, "body": resp.text}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception as e:
-            logger.exception("Unexpected error in FreezyChatView")
+            logger.exception("Unexpected error handling OpenRouter response")
             return Response({"error": "Internal server error", "details": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class FreezyChatStreamView(APIView):
     """
-    Streaming proxy: forwards SSE-style lines from OpenRouter to client.
-    Client should parse server-sent events. Body same as FreezyChatView.
+    Streaming proxy. Client should parse server-sent events.
     """
     permission_classes = [AllowAny]
 
     def post(self, request):
+        key = getattr(settings, "OPENROUTER_API_KEY", None)
+        logger.debug("FreezyChatStreamView called. openrouter_key=%s base=%s", _mask_key_for_log(key), OPENROUTER_BASE)
+
+        if not key:
+            return Response(
+                {"error": "AI backend not configured. OPENROUTER_API_KEY missing on server."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
         data = request.data or {}
         user_message = data.get("message", "")
         history = data.get("history", []) or []
@@ -157,18 +206,24 @@ class FreezyChatStreamView(APIView):
             "stream": True,
         }
 
+        url = get_openrouter_url("/chat/completions")
+        headers = get_openrouter_headers()
+
         try:
-            r = requests.post(
-                f"{OPENROUTER_BASE}/chat/completions",
-                headers=get_openrouter_headers(),
-                json=payload,
-                stream=True,
-                timeout=300,
-            )
-            r.raise_for_status()
+            r = requests.post(url, headers=headers, json=payload, stream=True, timeout=300)
         except requests.RequestException as e:
-            logger.exception("OpenRouter streaming failed")
-            return Response({"error": "OpenRouter stream failed", "details": str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+            logger.exception("OpenRouter streaming request failed")
+            return Response({"error": "OpenRouter stream request failed", "details": str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        if r.status_code == 401:
+            logger.warning("OpenRouter streaming returned 401 Unauthorized. body=%s", r.text[:2000])
+            return Response({"error": "OpenRouter unauthorized. Check OPENROUTER_API_KEY."}, status=status.HTTP_502_BAD_GATEWAY)
+
+        try:
+            r.raise_for_status()
+        except requests.HTTPError:
+            logger.exception("OpenRouter streaming returned HTTP error. status=%s body=%s", r.status_code, r.text[:2000])
+            return Response({"error": "OpenRouter stream failed", "status": r.status_code, "body": r.text}, status=status.HTTP_502_BAD_GATEWAY)
 
         def event_stream():
             try:
