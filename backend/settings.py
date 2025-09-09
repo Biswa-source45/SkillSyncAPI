@@ -30,7 +30,7 @@ OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3.1:fr
 SECRET_KEY = 'django-insecure-m*#s%3khf$udnd$stk(+s6ke@3^%jy00laox96=s7k!651cwf%'
 
 DEBUG = True
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["skillsyncapi.onrender.com","127.0.0.1","localhost"]
 
 
 # Application definition
