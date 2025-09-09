@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OTP Verification - SkillSync</title>
+    <style>
+        /* Email-safe CSS with fallbacks */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1625;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #e8e6f0;
+            line-height: 1.6;
+        }
+
+        .email-wrapper {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #1a1625;
+            padding: 20px 0;
+        }
+
+        .container {
+            background-color: #2d1b3d;
+            border: 1px solid #3f2a5c;
+            border-radius: 16px;
+            margin: 0 20px;
+            overflow: hidden;
+        }
+
+        /* Header Section */
+        .header {
+            background: linear-gradient(135deg, #3f2a5c, #2d1b3d);
+            padding: 40px 30px 30px;
+            text-align: center;
+            border-bottom: 1px solid #3f2a5c;
+        }
+
+        .logo {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 2px solid #7c4dff;
+            margin: 0 auto 20px;
+            display: block;
+        }
+
+        .header h1 {
+            color: #ffffff;
+            font-size: 26px;
+            font-weight: 600;
+            margin: 0 0 8px;
+            letter-spacing: -0.5px;
+        }
+
+        .header .subtitle {
+            color: #b8a9d9;
+            font-size: 16px;
+            margin: 0;
+            font-weight: 400;
+        }
+
+        /* Content Section */
+        .content {
+            padding: 30px;
+        }
+
+        .greeting {
+            color: #ffffff;
+            font-size: 18px;
+            margin: 0 0 20px;
+            font-weight: 500;
+        }
+
+        .message {
+            color: #b8a9d9;
+            font-size: 15px;
+            margin: 0 0 30px;
+            line-height: 1.5;
+        }
+
+        .user-info {
+            background-color: #241832;
+            border: 1px solid #3f2a5c;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 0 0 30px;
+        }
+
+        .user-info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .user-info-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .user-info-label {
+            color: #8b7aa8;
+            font-size: 13px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .user-info-value {
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: right;
+        }
+
+        /* OTP Section */
+        .otp-section {
+            background: linear-gradient(135deg, #3f2a5c, #5d3f7d);
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+            margin: 0 0 30px;
+            border: 1px solid #7c4dff;
+        }
+
+        .otp-label {
+            color: #b8a9d9;
+            font-size: 14px;
+            font-weight: 500;
+            margin: 0 0 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .otp-code {
+            background-color: #241832;
+            border: 2px solid #7c4dff;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 0 0 15px;
+            display: inline-block;
+        }
+
+        .otp {
+            color: #7c4dff;
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: 4px;
+            font-family: 'Courier New', monospace;
+            margin: 0;
+        }
+
+        .copy-hint {
+            color: #8b7aa8;
+            font-size: 12px;
+            font-style: italic;
+            margin: 10px 0 0;
+        }
+
+        /* Timer Section */
+        .timer-section {
+            background-color: #241832;
+            border: 1px solid #3f2a5c;
+            border-left: 4px solid #7c4dff;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 0 0 30px;
+        }
+
+        .timer-icon {
+            color: #7c4dff;
+            font-size: 16px;
+            margin-right: 8px;
+        }
+
+        .timer {
+            color: #7c4dff;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0 0 10px;
+        }
+
+        .timer-note {
+            color: #8b7aa8;
+            font-size: 13px;
+            margin: 0;
+        }
+
+        .timer-bar-container {
+            background-color: #1a1625;
+            height: 6px;
+            border-radius: 3px;
+            margin-top: 12px;
+            overflow: hidden;
+        }
+
+        .timer-bar {
+            background: linear-gradient(90deg, #7c4dff, #9c27b0);
+            height: 100%;
+            width: 100%;
+            border-radius: 3px;
+            animation: timerCountdown 600s linear forwards;
+        }
+
+        @keyframes timerCountdown {
+            from { width: 100%; }
+            to { width: 0%; }
+        }
+
+        /* Expired Message */
+        .expired-message {
+            background-color: #4a1a28;
+            border: 1px solid #d32f2f;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin: 0 0 30px;
+            display: none;
+        }
+
+        .expired-message .icon {
+            color: #f44336;
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+
+        .expired-message .title {
+            color: #f44336;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0 0 8px;
+        }
+
+        .expired-message .text {
+            color: #d4a5a5;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        /* Security Section */
+        .security-section {
+            background-color: #241832;
+            border: 1px solid #3f2a5c;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 0 0 30px;
+        }
+
+        .security-icon {
+            color: #ffd54f;
+            font-size: 18px;
+            margin-right: 8px;
+        }
+
+        .security-title {
+            color: #ffd54f;
+            font-size: 14px;
+            font-weight: 600;
+            margin: 0 0 8px;
+        }
+
+        .security-text {
+            color: #b8a9d9;
+            font-size: 13px;
+            margin: 0;
+        }
+
+        /* Footer */
+        .footer {
+            background-color: #1a1625;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #3f2a5c;
+        }
+
+        .footer-text {
+            color: #8b7aa8;
+            font-size: 13px;
+            margin: 0 0 15px;
+            line-height: 1.5;
+        }
+
+        .footer-brand {
+            color: #7c4dff;
+            font-size: 14px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .footer-links {
+            margin: 15px 0 0;
+        }
+
+        .footer-link {
+            color: #7c4dff;
+            text-decoration: none;
+            font-size: 12px;
+            margin: 0 10px;
+        }
+
+        /* Responsive */
+        @media screen and (max-width: 600px) {
+            .email-wrapper {
+                padding: 10px 0;
+            }
+            
+            .container {
+                margin: 0 10px;
+                border-radius: 12px;
+            }
+            
+            .header {
+                padding: 30px 20px 25px;
+            }
+            
+            .header h1 {
+                font-size: 22px;
+            }
+            
+            .header .subtitle {
+                font-size: 15px;
+            }
+            
+            .content {
+                padding: 25px 20px;
+            }
+            
+            .otp {
+                font-size: 28px;
+                letter-spacing: 3px;
+            }
+            
+            .otp-section {
+                padding: 25px 20px;
+            }
+            
+            .user-info-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .user-info-value {
+                text-align: left;
+                margin-top: 4px;
+            }
+            
+            .footer {
+                padding: 25px 20px;
+            }
+        }
+
+        /* Dark mode support for email clients */
+        @media (prefers-color-scheme: dark) {
+            .container {
+                background-color: #2d1b3d !important;
+            }
+        }
+
+        /* Email client specific fixes */
+        table {
+            border-collapse: collapse;
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+        }
+
+        img {
+            border: 0;
+            height: auto;
+            line-height: 100%;
+            outline: none;
+            text-decoration: none;
+            -ms-interpolation-mode: bicubic;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-wrapper">
+        <div class="container">
+            <!-- Header -->
+            <div class="header">
+                <img src="https://ik.imagekit.io/idk04977/logo.jpeg?updatedAt=1757264086360" 
+                     alt="SkillSync Logo" class="logo">
+                <h1>Email Verification</h1>
+                <p class="subtitle">Secure access to your SkillSync account</p>
+            </div>
+
+            <!-- Content -->
+            <div class="content">
+                <p class="greeting">Hello {{ username }},</p>
+                
+                <p class="message">
+                    Thank you for requesting a password reset on SkillSync. 
+                    Please use the verification code below to complete your request. 
+                    This code will expire in <strong>10 minutes</strong> for your security.
+                </p>
+
+                <!-- User Info -->
+                <div class="user-info">
+                    <div class="user-info-row">
+                        <span class="user-info-label">Account</span>
+                        <span class="user-info-value">{{ username }}</span>
+                    </div>
+                    <div class="user-info-row">
+                        <span class="user-info-label">Email</span>
+                        <span class="user-info-value">{{ email }}</span>
+                    </div>
+                </div>
+
+                <!-- OTP Section -->
+                <div class="otp-section">
+                    <p class="otp-label">Your Verification Code</p>
+                    <div class="otp-code">
+                        <div class="otp" id="otp">{{ otp }}</div>
+                    </div>
+                    <p class="copy-hint">Select and copy this code to use it</p>
+                </div>
+
+                <!-- Timer Section -->
+                <div class="timer-section" id="timer-section">
+                    <p class="timer">
+                        <span class="timer-icon">⏰</span>
+                        <span id="timer">Valid for: 10 minutes</span>
+                    </p>
+                    <p class="timer-note">This code will automatically expire for your security</p>
+                    <div class="timer-bar-container">
+                        <div class="timer-bar" id="timer-bar"></div>
+                    </div>
+                </div>
+
+                <!-- Expired Message (Hidden by default) -->
+                <div class="expired-message" id="expired-msg">
+                    <div class="icon">⚠️</div>
+                    <p class="title">Code Expired</p>
+                    <p class="text">This verification code has expired. Please request a new one to continue.</p>
+                </div>
+
+                <!-- Security Notice -->
+                <div class="security-section">
+                    <p class="security-title">
+                        <span class="security-icon">🔒</span>
+                        Security Notice
+                    </p>
+                    <p class="security-text">
+                        Never share this code with anyone. SkillSync will never ask for your verification code via phone, email, or any other method.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="footer">
+                <p class="footer-text">
+                    If you didn't request this password reset, you can safely ignore this email. 
+                    Your account remains secure.
+                </p>
+                
+                <p class="footer-brand">SkillSync</p>
+                <div class="footer-links">
+                    <a href="#" class="footer-link">Help Center</a>
+                    <a href="#" class="footer-link">Contact Support</a>
+                    <a href="#" class="footer-link">Privacy Policy</a>
+                </div>
+                
+                <p class="footer-text" style="margin-top: 20px; font-size: 11px;">
+                    © 2025 SkillSync. All rights reserved.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let timeLeft = 10 * 60; // 10 minutes in seconds
+        const timerElement = document.getElementById('timer');
+        const timerSection = document.getElementById('timer-section');
+        const expiredMsg = document.getElementById('expired-msg');
+
+        const timerInterval = setInterval(() => {
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                timerSection.style.display = 'none';
+                expiredMsg.style.display = 'block';
+            } else {
+                const minutes = Math.floor(timeLeft / 60);
+                const seconds = timeLeft % 60;
+                timerElement.textContent = `Valid for: ${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+                timeLeft--;
+            }
+        }, 1000);
+
+        // Make OTP selectable for easy copying in email clients
+        document.getElementById('otp').addEventListener('click', function() {
+            if (window.getSelection) {
+                const selection = window.getSelection();
+                const range = document.createRange();
+                range.selectNodeContents(this);
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
+        });
+    </script>
+</body>
+</html>
