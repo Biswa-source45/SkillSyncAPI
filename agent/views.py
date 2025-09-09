@@ -1,4 +1,3 @@
-# backend/agent/views.py
 import logging
 import requests
 import json
@@ -12,13 +11,17 @@ from rest_framework import status
 logger = logging.getLogger(__name__)
 
 OPENROUTER_BASE = getattr(settings, "OPENROUTER_BASE", "https://openrouter.ai/api/v1")
-OPENROUTER_KEY = getattr(settings, "OPENROUTER_API_KEY", None)
 OPENROUTER_MODEL = getattr(settings, "OPENROUTER_MODEL", "deepseek/deepseek-chat-v3.1:free")
 
-HEADERS = {
-    "Authorization": f"Bearer {OPENROUTER_KEY}" if OPENROUTER_KEY else "",
-    "Content-Type": "application/json",
-}
+def get_openrouter_headers():
+    """Always build headers fresh with the latest API key."""
+    key = getattr(settings, "OPENROUTER_API_KEY", None)
+    if not key:
+        raise RuntimeError("OPENROUTER_API_KEY not configured")
+    return {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
 
 FREEZY_SYSTEM_PROMPT = """
 You are Freezy ❄️ — the friendly AI agent for SkillSync.
@@ -43,31 +46,25 @@ def _extract_reply_text(resp_json):
     # Common OpenAI-like shape
     choices = resp_json.get("choices")
     if choices and isinstance(choices, list):
-        # try message.content first
         for c in choices:
             msg = c.get("message") or {}
             content = msg.get("content")
             if content:
                 if isinstance(content, dict):
-                    # sometimes content could be structured; stringify
                     return json.dumps(content)
                 return content
-        # fallback to choice.text
         texts = [c.get("text") for c in choices if c.get("text")]
         if texts:
             return " ".join(texts)
-    # Some responses include 'output' or 'result' keys
     if "output" in resp_json:
         out = resp_json["output"]
         if isinstance(out, list):
             return " ".join([str(x) for x in out])
         return str(out)
-    # last resort, try top-level 'message' or 'reply'
     for k in ("message", "reply", "text", "result"):
         val = resp_json.get(k)
         if isinstance(val, str) and val:
             return val
-    # fallback: stringify entire JSON (avoid leaking secrets)
     try:
         return json.dumps(resp_json)[:2000]
     except Exception:
@@ -81,9 +78,6 @@ class FreezyChatView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        if not OPENROUTER_KEY:
-            return Response({"error": "AI backend not configured"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
         data = request.data or {}
         user_message = data.get("message", "")
         history = data.get("history", []) or []
@@ -95,7 +89,6 @@ class FreezyChatView(APIView):
         messages = [{"role": "system", "content": FREEZY_SYSTEM_PROMPT}]
 
         if isinstance(history, list):
-            # include recent history but avoid huge payloads
             recent = history[-20:]
             for item in recent:
                 if isinstance(item, dict) and item.get("role") in ("user", "assistant"):
@@ -116,7 +109,7 @@ class FreezyChatView(APIView):
         try:
             resp = requests.post(
                 f"{OPENROUTER_BASE}/chat/completions",
-                headers=HEADERS,
+                headers=get_openrouter_headers(),
                 json=payload,
                 timeout=60,
             )
@@ -131,7 +124,6 @@ class FreezyChatView(APIView):
             logger.exception("Unexpected error in FreezyChatView")
             return Response({"error": "Internal server error", "details": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
 class FreezyChatStreamView(APIView):
     """
     Streaming proxy: forwards SSE-style lines from OpenRouter to client.
@@ -140,9 +132,6 @@ class FreezyChatStreamView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        if not OPENROUTER_KEY:
-            return Response({"error": "AI backend not configured"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
         data = request.data or {}
         user_message = data.get("message", "")
         history = data.get("history", []) or []
@@ -171,7 +160,7 @@ class FreezyChatStreamView(APIView):
         try:
             r = requests.post(
                 f"{OPENROUTER_BASE}/chat/completions",
-                headers=HEADERS,
+                headers=get_openrouter_headers(),
                 json=payload,
                 stream=True,
                 timeout=300,
@@ -186,11 +175,9 @@ class FreezyChatStreamView(APIView):
                 for raw_line in r.iter_lines(decode_unicode=True):
                     if not raw_line:
                         continue
-                    # Per OpenRouter/Streaming style: lines often begin with "data: "
                     line = raw_line.strip()
                     if line.startswith("data: "):
                         payload_line = line[len("data: "):]
-                        # forward same style SSE
                         yield f"data: {payload_line}\n\n"
                     else:
                         yield f"data: {line}\n\n"
