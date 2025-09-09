@@ -93,7 +93,7 @@ class LoginView(generics.GenericAPIView):
             value=access_token,
             httponly=True,
             secure=True,
-            samesite=None,
+            samesite='None',
             max_age=60 * 60 * 24
         )
         response.set_cookie(
@@ -101,7 +101,7 @@ class LoginView(generics.GenericAPIView):
             value=refresh_token,
             httponly=True,
             secure=True,
-            samesite=None,
+            samesite='None',
             max_age=60 * 60 * 24 * 7
         )
 
